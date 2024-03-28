@@ -2,7 +2,8 @@ package org.neo4j.cypher.internal.administration
 
 import org.neo4j.configuration.Config
 import org.neo4j.cypher.internal.AdministrationCommandRuntime.makeAlterUserExecutionPlan
-import org.neo4j.cypher.internal.{ExecutionEngine, ExecutionPlan}
+import org.neo4j.cypher.internal.ExecutionEngine
+import org.neo4j.cypher.internal.ExecutionPlan
 import org.neo4j.cypher.internal.logical.plans.AlterUser
 import org.neo4j.internal.kernel.api.security.SecurityAuthorizationHandler
 
@@ -17,11 +18,10 @@ import org.neo4j.internal.kernel.api.security.SecurityAuthorizationHandler
  * @param config Database configuration settings, potentially affecting the behavior of the alteration process.
  */
 case class DozerDbAlterUserExecutionPlanner(
-                                             executionEngine: ExecutionEngine,
-                                             securityAuthorizationHandler: SecurityAuthorizationHandler,
-                                             config: Config
+  executionEngine: ExecutionEngine,
+  securityAuthorizationHandler: SecurityAuthorizationHandler,
+  config: Config
 ) {
-
 
   /**
    * Generates an execution plan for altering a user within the Neo4j database.

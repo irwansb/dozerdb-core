@@ -355,7 +355,7 @@ case class DozerDbAdministrationCommandRuntime(
     If the database name is invalid, an `InvalidArgumentException` will be thrown with the validation error message. If the database creation fails during the execution of the plan, an `IllegalStateException` is thrown indicating that the new database could not be created.
        */
 
-      /**
+    /**
      * case class CreateDatabase(
      * source: AdministrationCommandLogicalPlan,
      * databaseName: Either[String, Parameter],
@@ -366,88 +366,63 @@ case class DozerDbAdministrationCommandRuntime(
      * )(implicit idGen: IdGen) extends DatabaseAdministrationLogicalPlan(Some(source))
      *
      */
-    //  case ShowDatabase(scope, verbose, symbols, yields, returns) => _ =>
-    case CreateDatabase(source, databaseName, _, _, _, _) => (context) =>
-        {
-          // TODO: Put this at top in main class.
-          val config: Config = resolver.resolveDependency(classOf[Config])
-          val defaultGdbNameFromConfig: String = config.get(GraphDatabaseSettings.initial_default_database)
-          val valuePropNames: Array[String] = Array("default", "name", "status", "uuid")
+    case CreateDatabase(source, databaseName, _, _, _, _) => (context) => {
+        // TODO: Put this at top in main class.
+        val config: Config = resolver.resolveDependency(classOf[Config])
+        val defaultGdbNameFromConfig: String = config.get(GraphDatabaseSettings.initial_default_database)
+        val valuePropNames: Array[String] = Array("default", "name", "status", "uuid")
 
-          val nameFields: NameFields = getNameFields(
-            "databaseName",
-            databaseName,
-            valueMapper = nameString => {
-              val normalizedDatabaseName: NormalizedDatabaseName = new NormalizedDatabaseName(nameString)
-              try {
-                DatabaseNameValidator.validateExternalDatabaseName(normalizedDatabaseName)
-              } catch {
-                case exception: IllegalArgumentException =>
-                  throw new InvalidArgumentException(exception.getMessage)
-              }
-              normalizedDatabaseName.name
+        val nameFields: NameFields = getNameFields(
+          "databaseName",
+          databaseName,
+          valueMapper = nameString => {
+            val normalizedDatabaseName: NormalizedDatabaseName = new NormalizedDatabaseName(nameString)
+            try {
+              DatabaseNameValidator.validateExternalDatabaseName(normalizedDatabaseName)
+            } catch {
+              case exception: IllegalArgumentException =>
+                throw new InvalidArgumentException(exception.getMessage)
             }
-          )
-          val nameValue: Value = nameFields.nameValue
+            normalizedDatabaseName.name
+          }
+        )
+        val nameValue: Value = nameFields.nameValue
 
-          UpdatingSystemCommandExecutionPlan(
-            "CreateDatabase",
-            normalExecutionEngine,
-            securityAuthorizationHandler,
-            s"""
-               | CREATE (database:Database)<-[:TARGETS]-(:DatabaseName {displayName: $$name, name: $$name, namespace: 'system-root', primary:true})
-               | SET
-               | database.access = 'READ_WRITE',
-               | database.created_at = datetime(),
-               | database.default = $$default,
-               | database.name = $$name,
-               | database.status = $$status,
-               | database.uuid = $$uuid
-               | RETURN database.name as name, database.status as status, database.uuid as uuid
+        UpdatingSystemCommandExecutionPlan(
+          "CreateDatabase",
+          normalExecutionEngine,
+          securityAuthorizationHandler,
+          s"""
+             | CREATE (database:Database)<-[:TARGETS]-(:DatabaseName {displayName: $$name, name: $$name, namespace: 'system-root', primary:true})
+             | SET
+             | database.access = 'READ_WRITE',
+             | database.created_at = datetime(),
+             | database.default = $$default,
+             | database.name = $$name,
+             | database.status = $$status,
+             | database.uuid = $$uuid
+             | RETURN database.name as name, database.status as status, database.uuid as uuid
         """.stripMargin,
-            VirtualValues.map(
-              valuePropNames,
-              Array(
-                Values.booleanValue(nameValue.equals(defaultGdbNameFromConfig)),
-                nameValue,
-                Values.stringValue(DatabaseStatus.Online.stringValue()),
-                Values.stringValue(UUID.randomUUID().toString())
-              )
-            ),
-            QueryHandler
-              .handleError {
-                case (error, _) =>
-                  new IllegalStateException(
-                    s"Could not create new gdb called ${nameValue}. It most likely already exists.",
-                    error
-                  )
-              },
-            Some(fullLogicalToExecutable.applyOrElse(source, throwCantCompile).apply(context))
-          )
-        } // End case CreateDatabase
-
-    /*
-    Function Name: EnsureValidNumberOfDatabases
-
-    The `EnsureValidNumberOfDatabases` function is used to ensure that the number of databases in the Neo4j instance does not exceed a certain limit, specified by `maximumGdbsAllowed`.
-
-    Parameters:
-    1. `source`: This refers to the source of the database from where the operation is invoked.
-
-    Description:
-    This function initiates an `UpdatingSystemCommandExecutionPlan` with the task "EnsureValidNumberOfDatabases". It begins by executing a Cypher query to match all nodes labeled as 'Database' and then return the count of such nodes as `gdbCount`.
-
-    This function does not require any additional input parameters, so `VirtualValues.EMPTY_MAP` is passed.
-
-    The `handleResult` function of `QueryHandler` is utilized to process the count of the databases. The count `gdbCount` is cast to a `LongValue` and checked against the maximum limit of allowed databases `maximumGdbsAllowed`.
-
-    If the number of existing databases (`gdbCountLong`) is greater than or equal to the maximum allowed databases, a `DatabaseLimitReachedException` is thrown with the message "Database Limit Reached Exception".
-
-    Finally, the function applies the `source` to the `fullLogicalToExecutable` function to compile and execute the operation.
-
-    Errors:
-    In case the number of databases exceeds the maximum allowed limit, a `DatabaseLimitReachedException` is thrown.
-     */
+          VirtualValues.map(
+            valuePropNames,
+            Array(
+              Values.booleanValue(nameValue.equals(defaultGdbNameFromConfig)),
+              nameValue,
+              Values.stringValue(DatabaseStatus.Online.stringValue()),
+              Values.stringValue(UUID.randomUUID().toString())
+            )
+          ),
+          QueryHandler
+            .handleError {
+              case (error, _) =>
+                new IllegalStateException(
+                  s"Could not create new gdb called ${nameValue}. It most likely already exists.",
+                  error
+                )
+            },
+          Some(fullLogicalToExecutable.applyOrElse(source, throwCantCompile).apply(context))
+        )
+      } // End case CreateDatabase
 
     case AssertManagementActionNotBlocked(action: AdministrationAction) => context =>
         AuthorizationAndPredicateExecutionPlan(

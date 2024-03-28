@@ -2,7 +2,8 @@ package org.neo4j.cypher.internal.administration
 
 import org.neo4j.configuration.Config
 import org.neo4j.cypher.internal.AdministrationCommandRuntime.makeCreateUserExecutionPlan
-import org.neo4j.cypher.internal.{ExecutionEngine, ExecutionPlan}
+import org.neo4j.cypher.internal.ExecutionEngine
+import org.neo4j.cypher.internal.ExecutionPlan
 import org.neo4j.cypher.internal.logical.plans.CreateUser
 import org.neo4j.internal.kernel.api.security.SecurityAuthorizationHandler
 
@@ -11,9 +12,9 @@ import org.neo4j.internal.kernel.api.security.SecurityAuthorizationHandler
 // It encapsulates the necessary components to generate execution plans for creating users.
 
 case class DozerDbCreateUserExecutionPlanner(
-                                              executionEngine: ExecutionEngine,
-                                              securityAuthorizationHandler: SecurityAuthorizationHandler,
-                                              config: Config
+  executionEngine: ExecutionEngine,
+  securityAuthorizationHandler: SecurityAuthorizationHandler,
+  config: Config
 ) {
 
   // This function generates an execution plan for creating a new user in the Neo4j database.
@@ -30,7 +31,6 @@ case class DozerDbCreateUserExecutionPlanner(
       suspended = createUser.suspended.getOrElse(false),
       createUser.defaultDatabase
     )(sourceExecutionPlan, executionEngine, securityAuthorizationHandler, config)
-
 
   }
 
