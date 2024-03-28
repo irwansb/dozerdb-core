@@ -33,9 +33,9 @@ import org.neo4j.cypher.internal.AdministrationCommandRuntime.NameFields
 import org.neo4j.cypher.internal.AdministrationCommandRuntime.getNameFields
 import org.neo4j.cypher.internal.AdministrationCommandRuntime.makeRenameExecutionPlan
 import org.neo4j.cypher.internal.AdministrationCommandRuntime.runtimeStringValue
-import org.neo4j.cypher.internal.administration.AlterUserExecutionPlanner
-import org.neo4j.cypher.internal.administration.CreateUserExecutionPlanner
 import org.neo4j.cypher.internal.administration.DoNothingExecutionPlanner
+import org.neo4j.cypher.internal.administration.DozerDbAlterUserExecutionPlanner
+import org.neo4j.cypher.internal.administration.DozerDbCreateUserExecutionPlanner
 import org.neo4j.cypher.internal.administration.DropUserExecutionPlanner
 import org.neo4j.cypher.internal.administration.EnsureNodeExistsExecutionPlanner
 import org.neo4j.cypher.internal.administration.SetOwnPasswordExecutionPlanner
@@ -279,7 +279,7 @@ case class DozerDbAdministrationCommandRuntime(
     case createUser: CreateUser => context =>
         val sourcePlan: Option[ExecutionPlan] =
           Some(fullLogicalToExecutable.applyOrElse(createUser.source, throwCantCompile).apply(context))
-        CreateUserExecutionPlanner(normalExecutionEngine, securityAuthorizationHandler, config).planCreateUser(
+        DozerDbCreateUserExecutionPlanner(normalExecutionEngine, securityAuthorizationHandler, config).planCreateUser(
           createUser,
           sourcePlan
         )
@@ -302,7 +302,7 @@ case class DozerDbAdministrationCommandRuntime(
     case alterUser: AlterUser => context =>
         val sourcePlan: Option[ExecutionPlan] =
           Some(fullLogicalToExecutable.applyOrElse(alterUser.source, throwCantCompile).apply(context))
-        AlterUserExecutionPlanner(normalExecutionEngine, securityAuthorizationHandler, config).planAlterUser(
+        DozerDbAlterUserExecutionPlanner(normalExecutionEngine, securityAuthorizationHandler, config).planAlterUser(
           alterUser,
           sourcePlan
         )
