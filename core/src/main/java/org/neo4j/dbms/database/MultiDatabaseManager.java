@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.neo4j.configuration.Config;
 import org.neo4j.dbms.api.DatabaseExistsException;
 import org.neo4j.dbms.api.DatabaseManagementException;
 import org.neo4j.graphdb.Node;
@@ -62,6 +63,8 @@ public final class MultiDatabaseManager {
 
     private final DatabaseOperationCounts.Counter counter;
 
+    private final Config config;
+
     public MultiDatabaseManager(
             GlobalModule globalModule,
             DatabaseRepository<StandaloneDatabaseContext> databaseRepository,
@@ -70,6 +73,7 @@ public final class MultiDatabaseManager {
         this.databaseRepository = databaseRepository;
         this.databaseContextFactory = databaseContextFactory;
         this.counter = globalModule.getGlobalDependencies().resolveDependency(DatabaseOperationCounts.Counter.class);
+        this.config = globalModule.getGlobalConfig();
     }
 
     /**
@@ -148,7 +152,7 @@ public final class MultiDatabaseManager {
 
     // TODO: We can also remove this check completely if needed.
     private void checkDatabaseLimit(NamedDatabaseId namedDatabaseId) {
-
+        // Integer maxDatabases = config.get(GraphDatabaseSettings.max_databases); // Retrieve the setting
         // TODO:  Get the actual count from the Graph configuration.
         if (databaseRepository.registeredDatabases().size() >= 100) {
             throw new DatabaseManagementException(
