@@ -1,11 +1,37 @@
+/*
+ * Copyright (c) "Neo4j"
+ * Neo4j Sweden AB [https://neo4j.com]
+ *
+ * This file is part of Neo4j.
+ *
+ * Neo4j is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+/*
+ *  Modifications Copyright (c) DozerDB
+ *  https://dozerdb.org
+ */
+
 package org.neo4j.cypher.internal.administration
 
 import org.neo4j.configuration.Config
 import org.neo4j.cypher.internal.AdministrationCommandRuntime.makeAlterUserExecutionPlan
 import org.neo4j.cypher.internal.ExecutionEngine
 import org.neo4j.cypher.internal.ExecutionPlan
+import org.neo4j.cypher.internal.ast.RemoveAuth
 import org.neo4j.cypher.internal.logical.plans.AlterUser
 import org.neo4j.internal.kernel.api.security.SecurityAuthorizationHandler
+import org.neo4j.server.security.systemgraph.UserSecurityGraphComponent
 
 /**
  * A case class designed for planning the alteration of user properties within the Neo4j database.
@@ -20,6 +46,7 @@ import org.neo4j.internal.kernel.api.security.SecurityAuthorizationHandler
 case class DozerDbAlterUserExecutionPlanner(
   executionEngine: ExecutionEngine,
   securityAuthorizationHandler: SecurityAuthorizationHandler,
+  userSecurityGraphComponent: UserSecurityGraphComponent,
   config: Config
 ) {
 
@@ -36,12 +63,12 @@ case class DozerDbAlterUserExecutionPlanner(
   def planAlterUser(alterUser: AlterUser, sourceExecutionPlan: Option[ExecutionPlan]): ExecutionPlan = {
     makeAlterUserExecutionPlan(
       alterUser.userName,
-      alterUser.isEncryptedPassword,
-      alterUser.initialPassword,
-      alterUser.requirePasswordChange,
       alterUser.suspended,
-      alterUser.defaultDatabase
-    )(sourceExecutionPlan, executionEngine, securityAuthorizationHandler, config)
+      alterUser.defaultDatabase,
+      nativeAuth = alterUser.nativeAuth,
+      externalAuths = Seq.empty,
+      removeAuths = RemoveAuth(all = false, List.empty)
+    )(sourceExecutionPlan, executionEngine, securityAuthorizationHandler, userSecurityGraphComponent, config)
 
   }
 

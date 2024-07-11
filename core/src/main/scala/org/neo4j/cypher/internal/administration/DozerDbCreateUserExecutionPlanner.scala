@@ -1,11 +1,36 @@
+/*
+ * Copyright (c) "Neo4j"
+ * Neo4j Sweden AB [https://neo4j.com]
+ *
+ * This file is part of Neo4j.
+ *
+ * Neo4j is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+/*
+ *  Modifications Copyright (c) DozerDB
+ *  https://dozerdb.org
+ */
 package org.neo4j.cypher.internal.administration
 
 import org.neo4j.configuration.Config
 import org.neo4j.cypher.internal.AdministrationCommandRuntime.makeCreateUserExecutionPlan
 import org.neo4j.cypher.internal.ExecutionEngine
 import org.neo4j.cypher.internal.ExecutionPlan
+import org.neo4j.cypher.internal.ast.RemoveAuth
 import org.neo4j.cypher.internal.logical.plans.CreateUser
 import org.neo4j.internal.kernel.api.security.SecurityAuthorizationHandler
+import org.neo4j.server.security.systemgraph.UserSecurityGraphComponent
 
 // A case class designed for creating user execution plans within the Neo4j database.
 // This class is a part of the administration tools that allow for detailed user management.
@@ -25,11 +50,10 @@ case class DozerDbCreateUserExecutionPlanner(
 
     makeCreateUserExecutionPlan(
       createUser.userName,
-      createUser.isEncryptedPassword,
-      createUser.initialPassword,
-      createUser.requirePasswordChange,
       suspended = createUser.suspended.getOrElse(false),
-      createUser.defaultDatabase
+      createUser.defaultDatabase,
+      nativeAuth = createUser.nativeAuth,
+      externalAuths = Seq.empty
     )(sourceExecutionPlan, executionEngine, securityAuthorizationHandler, config)
 
   }

@@ -96,6 +96,7 @@ import org.neo4j.internal.kernel.api.security.SecurityContext
 import org.neo4j.internal.kernel.api.security.Segment
 import org.neo4j.kernel.database.NormalizedDatabaseName
 import org.neo4j.kernel.impl.api.security.RestrictedAccessMode
+import org.neo4j.server.security.systemgraph.UserSecurityGraphComponent
 import org.neo4j.values.storable.LongValue
 import org.neo4j.values.storable.TextValue
 import org.neo4j.values.storable.Value
@@ -126,6 +127,9 @@ case class DozerDbAdministrationCommandRuntime(
     new SecurityAuthorizationHandler(resolver.resolveDependency(classOf[AbstractSecurityLog]))
 
   private val config: Config = resolver.resolveDependency(classOf[Config])
+
+  private lazy val userSecurity: UserSecurityGraphComponent =
+    resolver.resolveDependency(classOf[UserSecurityGraphComponent])
 
   def throwCantCompile(unknownPlan: LogicalPlan): Nothing = {
     throw new CantCompileQueryException(
@@ -279,7 +283,11 @@ case class DozerDbAdministrationCommandRuntime(
     case createUser: CreateUser => context =>
         val sourcePlan: Option[ExecutionPlan] =
           Some(fullLogicalToExecutable.applyOrElse(createUser.source, throwCantCompile).apply(context))
-        DozerDbCreateUserExecutionPlanner(normalExecutionEngine, securityAuthorizationHandler, config).planCreateUser(
+        DozerDbCreateUserExecutionPlanner(
+          normalExecutionEngine,
+          securityAuthorizationHandler,
+          config
+        ).planCreateUser(
           createUser,
           sourcePlan
         )
@@ -302,7 +310,12 @@ case class DozerDbAdministrationCommandRuntime(
     case alterUser: AlterUser => context =>
         val sourcePlan: Option[ExecutionPlan] =
           Some(fullLogicalToExecutable.applyOrElse(alterUser.source, throwCantCompile).apply(context))
-        DozerDbAlterUserExecutionPlanner(normalExecutionEngine, securityAuthorizationHandler, config).planAlterUser(
+        DozerDbAlterUserExecutionPlanner(
+          normalExecutionEngine,
+          securityAuthorizationHandler,
+          userSecurity,
+          config
+        ).planAlterUser(
           alterUser,
           sourcePlan
         )

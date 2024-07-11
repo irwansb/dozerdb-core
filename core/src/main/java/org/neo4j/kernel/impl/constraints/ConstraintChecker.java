@@ -276,7 +276,8 @@ public class ConstraintChecker {
                                 labelSchemaDescriptor,
                                 constraintDescriptor.isNodeKeyConstraint()
                                         ? ConstraintDescriptorFactory::keyForSchema
-                                        : ConstraintDescriptorFactory::existsForSchema,
+                                        : (descriptorVar) ->
+                                                ConstraintDescriptorFactory.existsForSchema(descriptorVar, false),
                                 Phase.VALIDATION,
                                 nodeId,
                                 storageReader.tokenNameLookup());
@@ -323,7 +324,8 @@ public class ConstraintChecker {
                                 relationTypeSchemaDescriptor,
                                 constraintDescriptor.isRelationshipKeyConstraint()
                                         ? ConstraintDescriptorFactory::keyForSchema
-                                        : ConstraintDescriptorFactory::existsForSchema,
+                                        : (descriptorVar) ->
+                                                ConstraintDescriptorFactory.existsForSchema(descriptorVar, false),
                                 Phase.VALIDATION,
                                 relId,
                                 storageReader.tokenNameLookup());
