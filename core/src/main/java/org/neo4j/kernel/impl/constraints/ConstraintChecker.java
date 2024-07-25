@@ -75,23 +75,13 @@ public class ConstraintChecker {
                 for (Iterator<ConstraintDescriptor> it = storageReader.constraintsGetAll(); it.hasNext(); ) {
                     ConstraintDescriptor constraintDescriptor = it.next();
                     if (constraintDescriptor.enforcesPropertyExistence()) {
-                        constraintDescriptor.schema().processWith(new SchemaProcessor() {
-                            @Override
-                            public void processSpecific(LabelSchemaDescriptor labelSchemaDescriptor) {
-                                nodeLabelSchemaDescriptors.add(labelSchemaDescriptor);
-                            }
+                        if (constraintDescriptor.schema().isSchemaDescriptorType(LabelSchemaDescriptor.class)) {
+                            nodeLabelSchemaDescriptors.add((LabelSchemaDescriptor) constraintDescriptor);
+                        }
 
-                            @Override
-                            public void processSpecific(RelationTypeSchemaDescriptor relationTypeSchemaDescriptor) {
-                                relsLabelSchemaDescriptors.add(relationTypeSchemaDescriptor);
-                            }
-
-                            @Override
-                            public void processSpecific(SchemaDescriptor schemaDescriptor) {
-                                throw new UnsupportedOperationException(
-                                        "processSpecific for SchemaDescriptor class is not implemented.");
-                            }
-                        });
+                        if (constraintDescriptor.schema().isSchemaDescriptorType(RelationTypeSchemaDescriptor.class)) {
+                            relsLabelSchemaDescriptors.add((RelationTypeSchemaDescriptor) constraintDescriptor);
+                        }
                     }
                 }
 

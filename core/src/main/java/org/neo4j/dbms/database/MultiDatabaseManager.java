@@ -154,6 +154,8 @@ public final class MultiDatabaseManager {
     private void checkDatabaseLimit(NamedDatabaseId namedDatabaseId) {
         // Integer maxDatabases = config.get(GraphDatabaseSettings.max_databases); // Retrieve the setting
         // TODO:  Get the actual count from the Graph configuration.
+        // Integer maxDatabases = config.get(GraphDatabaseSettings.max_databases).orElse(100); // Default to 100 if not
+        // set
         if (databaseRepository.registeredDatabases().size() >= 100) {
             throw new DatabaseManagementException(
                     "Could not create gdb: " + namedDatabaseId.name() + " because you have exceeded the limit of 100.");

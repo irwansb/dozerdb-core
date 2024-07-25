@@ -101,7 +101,6 @@ import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 import org.neo4j.logging.InternalLogProvider;
 import org.neo4j.logging.internal.LogService;
-import org.neo4j.procedure.builtin.BuiltInDbmsProcedures.UpgradeAllowedChecker.UpgradeAlwaysAllowed;
 import org.neo4j.procedure.impl.ProcedureConfig;
 import org.neo4j.router.CommunityQueryRouterBootstrap;
 import org.neo4j.server.CommunityNeoWebServer;
@@ -224,7 +223,9 @@ public class DozerDbEditionModule extends AbstractEditionModule implements Defau
 
         defaultDatabaseInitializer = databaseLifecycles.defaultDatabaseStarter();
 
-        globalModule.getGlobalDependencies().satisfyDependency(new UpgradeAlwaysAllowed());
+        globalModule
+                .getGlobalDependencies()
+                .satisfyDependency(SystemGraphComponents.UpgradeChecker.UPGRADE_ALWAYS_ALLOWED);
 
         return databaseRepository;
     }
