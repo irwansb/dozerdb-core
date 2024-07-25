@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.neo4j.configuration.Config;
+import org.neo4j.configuration.DozerDbSettings;
 import org.neo4j.dbms.api.DatabaseExistsException;
 import org.neo4j.dbms.api.DatabaseManagementException;
 import org.neo4j.graphdb.Node;
@@ -152,13 +153,12 @@ public final class MultiDatabaseManager {
 
     // TODO: We can also remove this check completely if needed.
     private void checkDatabaseLimit(NamedDatabaseId namedDatabaseId) {
-        // Integer maxDatabases = config.get(GraphDatabaseSettings.max_databases); // Retrieve the setting
-        // TODO:  Get the actual count from the Graph configuration.
-        // Integer maxDatabases = config.get(GraphDatabaseSettings.max_databases).orElse(100); // Default to 100 if not
-        // set
-        if (databaseRepository.registeredDatabases().size() >= 100) {
-            throw new DatabaseManagementException(
-                    "Could not create gdb: " + namedDatabaseId.name() + " because you have exceeded the limit of 100.");
+
+        Integer maxDatabases = config.get(DozerDbSettings.max_databases); // Default to 100 if not
+
+        if (databaseRepository.registeredDatabases().size() >= maxDatabases) {
+            throw new DatabaseManagementException("Could not create gdb: " + namedDatabaseId.name()
+                    + " because you have exceeded the limit of " + maxDatabases + ".");
         }
     }
 

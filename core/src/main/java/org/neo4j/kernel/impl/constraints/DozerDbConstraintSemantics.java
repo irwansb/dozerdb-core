@@ -300,8 +300,6 @@ public class DozerDbConstraintSemantics extends StandardConstraintSemantics {
         if (propertyCursor.next()) {
             Value value = propertyCursor.propertyValue();
 
-            // if (!descriptor.propertyType().valueIsOfTypes(value)) {
-            System.out.println(" *********************** Do we flip this.....!!!!  ");
             if (TypeRepresentation.disallows(descriptor.propertyType(), value)) {
                 PropertyTypeException propertyTypeException = new PropertyTypeException(
                         descriptor,
