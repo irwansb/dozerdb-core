@@ -35,6 +35,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.neo4j.collection.Dependencies;
+import org.neo4j.configuration.Config;
+import org.neo4j.configuration.DozerDbSettings;
 import org.neo4j.configuration.GraphDatabaseSettings;
 import org.neo4j.dbms.api.DatabaseManagementException;
 import org.neo4j.graphdb.factory.module.GlobalModule;
@@ -60,10 +62,12 @@ class MultiDatabaseLifecycleServiceTest {
 
     @BeforeEach
     void setup() {
-
+        Config config = Config.defaults(DozerDbSettings.max_databases, 100);
         var globalModule = mock(GlobalModule.class);
 
         when(globalModule.getLogService()).thenReturn(NullLogService.getInstance());
+        when(globalModule.getGlobalConfig()).thenReturn(config);
+
         Dependencies dependencies = new Dependencies();
         DatabaseOperationCounts.Counter counter = new DatabaseOperationCounts.Counter();
         dependencies.satisfyDependency(counter);

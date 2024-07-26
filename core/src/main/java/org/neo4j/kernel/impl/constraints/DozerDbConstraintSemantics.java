@@ -107,7 +107,8 @@ public class DozerDbConstraintSemantics extends StandardConstraintSemantics {
             NodeCursor nodeCursor,
             PropertyCursor propertyCursor,
             LabelSchemaDescriptor descriptor,
-            TokenNameLookup tokenNameLookup)
+            TokenNameLookup tokenNameLookup,
+            boolean isDependent)
             throws CreateConstraintFailureException {
 
         // TODO: We need to loop through the cursor and check each one for property constraints using property ids in
@@ -122,7 +123,8 @@ public class DozerDbConstraintSemantics extends StandardConstraintSemantics {
             RelationshipScanCursor relationshipCursor,
             PropertyCursor propertyCursor,
             RelationTypeSchemaDescriptor descriptor,
-            TokenNameLookup tokenNameLookup)
+            TokenNameLookup tokenNameLookup,
+            boolean isDependent)
             throws CreateConstraintFailureException {
         // TODO: Implement
     }
@@ -132,7 +134,8 @@ public class DozerDbConstraintSemantics extends StandardConstraintSemantics {
             RelationshipTypeIndexCursor allRelationships,
             PropertyCursor propertyCursor,
             RelationTypeSchemaDescriptor descriptor,
-            TokenNameLookup tokenNameLookup)
+            TokenNameLookup tokenNameLookup,
+            boolean isDependent)
             throws CreateConstraintFailureException {
         // TODO: Implement
     }
@@ -186,7 +189,8 @@ public class DozerDbConstraintSemantics extends StandardConstraintSemantics {
             NodeCursor nodeCursor,
             PropertyCursor propertyCursor,
             LabelSchemaDescriptor descriptor,
-            TokenNameLookup tokenNameLookup)
+            TokenNameLookup tokenNameLookup,
+            boolean isDependent)
             throws CreateConstraintFailureException {
         while (nodeCursor.next()) {
             if (this.verify(descriptor.getPropertyIds(), propertyCursor, nodeCursor)) {
@@ -194,7 +198,7 @@ public class DozerDbConstraintSemantics extends StandardConstraintSemantics {
             }
             NodePropertyExistenceException nodePropertyExistenceException = new NodePropertyExistenceException(
                     descriptor,
-                    ConstraintDescriptorFactory::existsForSchema,
+                    (descriptorVar) -> ConstraintDescriptorFactory.existsForSchema(descriptorVar, false),
                     ConstraintValidationException.Phase.VERIFICATION,
                     nodeCursor.nodeReference(),
                     tokenNameLookup);
@@ -220,7 +224,7 @@ public class DozerDbConstraintSemantics extends StandardConstraintSemantics {
             LabelSchemaDescriptor descriptor,
             TokenNameLookup tokenNameLookup)
             throws CreateConstraintFailureException {
-        validateNodePropertyExistenceConstraint(nodeCursor, propertyCursor, descriptor, tokenNameLookup);
+        validateNodePropertyExistenceConstraint(nodeCursor, propertyCursor, descriptor, tokenNameLookup, false);
     }
 
     @Override
@@ -230,7 +234,7 @@ public class DozerDbConstraintSemantics extends StandardConstraintSemantics {
             RelationTypeSchemaDescriptor descriptor,
             TokenNameLookup tokenNameLookup)
             throws CreateConstraintFailureException {
-        validateRelationshipPropertyExistenceConstraint(relCursor, propertyCursor, descriptor, tokenNameLookup);
+        validateRelationshipPropertyExistenceConstraint(relCursor, propertyCursor, descriptor, tokenNameLookup, false);
     }
 
     @Override
@@ -296,8 +300,6 @@ public class DozerDbConstraintSemantics extends StandardConstraintSemantics {
         if (propertyCursor.next()) {
             Value value = propertyCursor.propertyValue();
 
-            // if (!descriptor.propertyType().valueIsOfTypes(value)) {
-            System.out.println(" *********************** Do we flip this.....!!!!  ");
             if (TypeRepresentation.disallows(descriptor.propertyType(), value)) {
                 PropertyTypeException propertyTypeException = new PropertyTypeException(
                         descriptor,

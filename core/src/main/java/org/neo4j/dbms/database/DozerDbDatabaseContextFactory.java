@@ -40,6 +40,7 @@ import org.neo4j.kernel.database.DatabaseCreationContext;
 import org.neo4j.kernel.database.DatabaseTracers;
 import org.neo4j.kernel.database.GlobalAvailabilityGuardController;
 import org.neo4j.kernel.database.NamedDatabaseId;
+import org.neo4j.kernel.impl.api.CommandCommitListeners;
 import org.neo4j.kernel.impl.api.CommitProcessFactory;
 import org.neo4j.kernel.impl.api.ExternalIdReuseConditionProvider;
 import org.neo4j.kernel.impl.api.LeaseService;
@@ -122,7 +123,9 @@ public class DozerDbDatabaseContextFactory
                     new GlobalAvailabilityGuardController(globalModule.getGlobalAvailabilityGuard()),
                     components.readOnlyDatabases(),
                     controllerService,
-                    new DatabaseTracers(globalModule.getTracers(), namedDatabaseId));
+                    new DatabaseTracers(globalModule.getTracers(), namedDatabaseId),
+                    CommandCommitListeners.NO_LISTENERS,
+                    null);
             kernelDatabase = new Database(creationContext);
             context = new StandaloneDatabaseContext(kernelDatabase);
         }
