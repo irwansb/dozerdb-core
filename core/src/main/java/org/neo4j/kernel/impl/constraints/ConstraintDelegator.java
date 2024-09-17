@@ -11,20 +11,23 @@
 package org.neo4j.kernel.impl.constraints;
 
 import org.eclipse.collections.api.IntIterable;
+import org.eclipse.collections.api.map.primitive.MutableIntObjectMap;
 import org.eclipse.collections.api.set.primitive.LongSet;
-import org.eclipse.collections.api.set.primitive.MutableIntSet;
-import org.eclipse.collections.impl.set.mutable.primitive.IntHashSet;
+import org.eclipse.collections.impl.map.mutable.primitive.IntObjectHashMap;
 import org.neo4j.exceptions.KernelException;
 import org.neo4j.internal.kernel.api.*;
 import org.neo4j.internal.kernel.api.exceptions.schema.ConstraintValidationException;
+import org.neo4j.internal.schema.constraints.TypeConstraintDescriptor;
 import org.neo4j.io.IOUtils;
 import org.neo4j.io.pagecache.context.CursorContext;
 import org.neo4j.kernel.api.exceptions.schema.NodePropertyExistenceException;
+import org.neo4j.kernel.api.exceptions.schema.PropertyTypeException;
 import org.neo4j.kernel.api.exceptions.schema.RelationshipPropertyExistenceException;
 import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StorageProperty;
 import org.neo4j.storageengine.api.txstate.RelationshipModifications;
 import org.neo4j.storageengine.api.txstate.TxStateVisitor;
+import org.neo4j.values.storable.Value;
 
 /**
  * The `ConstraintDelegator` class extends the `TxStateVisitor.Delegator` to validate constraints on nodes and relationships
@@ -50,7 +53,7 @@ public class ConstraintDelegator extends TxStateVisitor.Delegator {
     private final Read read;
     private final RelationshipScanCursor relationshipScanCursor;
 
-    private final MutableIntSet mutablePropertyKeys = new IntHashSet();
+    private final MutableIntObjectMap<Value> mutablePropertyKeys = new IntObjectHashMap<>();
 
     public ConstraintDelegator(
             ConstraintChecker constraintChecker,
@@ -117,9 +120,10 @@ public class ConstraintDelegator extends TxStateVisitor.Delegator {
      * @param nodeId The ID of the node to check.
      * @throws NodePropertyExistenceException If the specified node does not meet the property existence constraints.
      */
-    private void checkNode(long nodeId) throws NodePropertyExistenceException {
+    private void checkNode(long nodeId) throws NodePropertyExistenceException, PropertyTypeException {
         // If no property constraints are defined, skip the check
-        if (constraintChecker.getNodePropertyMap().isEmpty()) {
+        if (constraintChecker.getNodePropertyMap().isEmpty()
+                && constraintChecker.getNodeTypeConstraintDescriptorMap().isEmpty()) {
             return;
         }
 
@@ -139,6 +143,7 @@ public class ConstraintDelegator extends TxStateVisitor.Delegator {
         populateNodeProperties();
         // Check node properties against constraints
         constraintChecker.checkNode(nodeId, tokenSet, mutablePropertyKeys);
+        constraintChecker.checkNodeWithTypeConstraints(nodeId, tokenSet, mutablePropertyKeys);
     }
 
     /**
@@ -162,7 +167,7 @@ public class ConstraintDelegator extends TxStateVisitor.Delegator {
         nodeCursor.properties(propertyCursor);
         // Add each property key to the set
         while (propertyCursor.next()) {
-            mutablePropertyKeys.add(propertyCursor.propertyKey());
+            mutablePropertyKeys.put(propertyCursor.propertyKey(), propertyCursor.propertyValue());
         }
     }
 
@@ -173,8 +178,9 @@ public class ConstraintDelegator extends TxStateVisitor.Delegator {
      * @param relId The ID of the relationship to check.
      * @throws RelationshipPropertyExistenceException If the specified relationship does not meet the property existence constraints.
      */
-    private void checkRel(long relId) throws RelationshipPropertyExistenceException {
-        if (constraintChecker.getRelPropertyMap().isEmpty()) {
+    private void checkRel(long relId) throws RelationshipPropertyExistenceException, PropertyTypeException {
+        if (constraintChecker.getRelPropertyMap().isEmpty()
+                && constraintChecker.getRelsTypeConstraintDescriptorMap().isEmpty()) {
             return;
         }
 
@@ -185,13 +191,15 @@ public class ConstraintDelegator extends TxStateVisitor.Delegator {
 
         int typeToCheck = relationshipScanCursor.type();
         int[] shouldHavePropertiesArray = constraintChecker.getRelPropertyMap().get(typeToCheck);
-
-        if (shouldHavePropertiesArray == null) {
+        MutableIntObjectMap<TypeConstraintDescriptor> relsTypeConstraints =
+                constraintChecker.getRelsTypeConstraintDescriptorMap().get(typeToCheck);
+        if (shouldHavePropertiesArray == null && relsTypeConstraints == null) {
             return;
         }
 
         populateRelationshipProperties();
         validateRelationshipProperties(relId, typeToCheck, shouldHavePropertiesArray);
+        constraintChecker.checkEntityWithTypeConstraints(relId, relsTypeConstraints, mutablePropertyKeys);
     }
 
     /**
@@ -212,7 +220,7 @@ public class ConstraintDelegator extends TxStateVisitor.Delegator {
         mutablePropertyKeys.clear();
         relationshipScanCursor.properties(propertyCursor);
         while (propertyCursor.next()) {
-            mutablePropertyKeys.add(propertyCursor.propertyKey());
+            mutablePropertyKeys.put(propertyCursor.propertyKey(), propertyCursor.propertyValue());
         }
     }
 
@@ -229,7 +237,7 @@ public class ConstraintDelegator extends TxStateVisitor.Delegator {
     private void validateRelationshipProperties(long relId, int typeToCheck, int[] shouldHavePropertiesArray)
             throws RelationshipPropertyExistenceException {
         for (int propertyKey : shouldHavePropertiesArray) {
-            if (!mutablePropertyKeys.contains(propertyKey)) {
+            if (!mutablePropertyKeys.containsKey(propertyKey)) {
                 constraintChecker.relConstraintFailure(relId, typeToCheck, propertyKey);
             }
         }

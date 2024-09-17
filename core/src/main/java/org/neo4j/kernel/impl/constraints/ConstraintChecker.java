@@ -12,23 +12,31 @@ package org.neo4j.kernel.impl.constraints;
 
 import java.util.*;
 import java.util.function.Function;
+import org.eclipse.collections.api.iterator.MutableIntIterator;
 import org.eclipse.collections.api.iterator.MutableLongIterator;
+import org.eclipse.collections.api.map.primitive.MutableIntObjectMap;
 import org.eclipse.collections.api.map.primitive.MutableLongObjectMap;
-import org.eclipse.collections.api.set.primitive.IntSet;
+import org.eclipse.collections.impl.map.mutable.primitive.IntObjectHashMap;
 import org.eclipse.collections.impl.map.mutable.primitive.LongObjectHashMap;
 import org.neo4j.collection.PrimitiveArrays;
 import org.neo4j.internal.kernel.api.CursorFactory;
 import org.neo4j.internal.kernel.api.Read;
 import org.neo4j.internal.kernel.api.TokenSet;
 import org.neo4j.internal.kernel.api.exceptions.schema.ConstraintValidationException.Phase;
-import org.neo4j.internal.schema.*;
+import org.neo4j.internal.schema.ConstraintDescriptor;
+import org.neo4j.internal.schema.LabelSchemaDescriptor;
+import org.neo4j.internal.schema.RelationTypeSchemaDescriptor;
 import org.neo4j.internal.schema.constraints.ConstraintDescriptorFactory;
+import org.neo4j.internal.schema.constraints.SchemaValueType;
+import org.neo4j.internal.schema.constraints.TypeConstraintDescriptor;
 import org.neo4j.io.pagecache.context.CursorContext;
 import org.neo4j.kernel.api.exceptions.schema.NodePropertyExistenceException;
+import org.neo4j.kernel.api.exceptions.schema.PropertyTypeException;
 import org.neo4j.kernel.api.exceptions.schema.RelationshipPropertyExistenceException;
 import org.neo4j.memory.MemoryTracker;
 import org.neo4j.storageengine.api.StorageReader;
 import org.neo4j.storageengine.api.txstate.TxStateVisitor;
+import org.neo4j.values.storable.Value;
 
 /**
  * This class is responsible for checking and enforcing schema constraints
@@ -38,7 +46,12 @@ import org.neo4j.storageengine.api.txstate.TxStateVisitor;
 public class ConstraintChecker {
 
     public static final ConstraintChecker EMPTY_CHECKER =
-            new ConstraintChecker(null, Collections.emptyList(), Collections.emptyList()) {
+            new ConstraintChecker(
+                    null,
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList(),
+                    Collections.emptyList()) {
 
                 @Override
                 TxStateVisitor visit(
@@ -71,25 +84,46 @@ public class ConstraintChecker {
             storageReader -> {
                 var nodeLabelSchemaDescriptors = new ArrayList<LabelSchemaDescriptor>();
                 var relsLabelSchemaDescriptors = new ArrayList<RelationTypeSchemaDescriptor>();
+                var nodeTypeConstraintDescriptors = new ArrayList<ConstraintDescriptor>();
+                var relsTypeConstraintDescriptors = new ArrayList<ConstraintDescriptor>();
 
                 for (Iterator<ConstraintDescriptor> it = storageReader.constraintsGetAll(); it.hasNext(); ) {
                     ConstraintDescriptor constraintDescriptor = it.next();
                     if (constraintDescriptor.enforcesPropertyExistence()) {
                         if (constraintDescriptor.schema().isSchemaDescriptorType(LabelSchemaDescriptor.class)) {
-                            nodeLabelSchemaDescriptors.add((LabelSchemaDescriptor) constraintDescriptor);
+                            nodeLabelSchemaDescriptors.add((LabelSchemaDescriptor) constraintDescriptor.schema());
                         }
 
                         if (constraintDescriptor.schema().isSchemaDescriptorType(RelationTypeSchemaDescriptor.class)) {
-                            relsLabelSchemaDescriptors.add((RelationTypeSchemaDescriptor) constraintDescriptor);
+                            relsLabelSchemaDescriptors.add(
+                                    (RelationTypeSchemaDescriptor) constraintDescriptor.schema());
+                        }
+                    }
+
+                    if (constraintDescriptor.enforcesPropertyType()) {
+                        if (constraintDescriptor.schema().isSchemaDescriptorType(LabelSchemaDescriptor.class)) {
+                            nodeTypeConstraintDescriptors.add(constraintDescriptor);
+                        }
+
+                        if (constraintDescriptor.schema().isSchemaDescriptorType(RelationTypeSchemaDescriptor.class)) {
+                            relsTypeConstraintDescriptors.add(constraintDescriptor);
                         }
                     }
                 }
 
-                if (nodeLabelSchemaDescriptors.isEmpty() && relsLabelSchemaDescriptors.isEmpty()) {
+                if (nodeLabelSchemaDescriptors.isEmpty()
+                        && relsLabelSchemaDescriptors.isEmpty()
+                        && nodeTypeConstraintDescriptors.isEmpty()
+                        && relsTypeConstraintDescriptors.isEmpty()) {
                     return EMPTY_CHECKER;
                 }
 
-                return new ConstraintChecker(storageReader, nodeLabelSchemaDescriptors, relsLabelSchemaDescriptors);
+                return new ConstraintChecker(
+                        storageReader,
+                        nodeLabelSchemaDescriptors,
+                        relsLabelSchemaDescriptors,
+                        nodeTypeConstraintDescriptors,
+                        relsTypeConstraintDescriptors);
             };
 
     private final StorageReader storageReader;
@@ -97,6 +131,10 @@ public class ConstraintChecker {
     private final List<RelationTypeSchemaDescriptor> relationTypeSchemaDescriptors;
     private final MutableLongObjectMap<int[]> nodePropertyMap = new LongObjectHashMap<>();
     private final MutableLongObjectMap<int[]> relPropertyMap = new LongObjectHashMap<>();
+    private final MutableLongObjectMap<MutableIntObjectMap<TypeConstraintDescriptor>> nodeTypeConstraintDescriptorMap =
+            new LongObjectHashMap<>();
+    private final MutableLongObjectMap<MutableIntObjectMap<TypeConstraintDescriptor>> relsTypeConstraintDescriptorMap =
+            new LongObjectHashMap<>();
 
     /**
      * Constructor that initializes the constraint checker with the provided storage reader and schema descriptors.
@@ -108,7 +146,9 @@ public class ConstraintChecker {
     public ConstraintChecker(
             StorageReader storageReader,
             List<LabelSchemaDescriptor> nodeLabelSchemaDescriptors,
-            List<RelationTypeSchemaDescriptor> relsLabelSchemaDescriptors) {
+            List<RelationTypeSchemaDescriptor> relsLabelSchemaDescriptors,
+            List<ConstraintDescriptor> nodeTypeConstraintDescriptors,
+            List<ConstraintDescriptor> relsTypeConstraintDescriptors) {
         this.storageReader = storageReader;
         this.nodeLabelSchemaDescriptors = nodeLabelSchemaDescriptors;
         this.relationTypeSchemaDescriptors = relsLabelSchemaDescriptors;
@@ -125,6 +165,36 @@ public class ConstraintChecker {
                     this.relPropertyMap,
                     schemaDescriptor.getRelTypeId(),
                     immutableSorter(schemaDescriptor.getPropertyIds()));
+        }
+
+        for (ConstraintDescriptor constraintDescriptor : nodeTypeConstraintDescriptors) {
+            var current = nodeTypeConstraintDescriptorMap.get(
+                    constraintDescriptor.schema().getLabelId());
+            if (current != null) {
+                current.put(
+                        constraintDescriptor.schema().getPropertyId(), constraintDescriptor.asPropertyTypeConstraint());
+            } else {
+                var propertyTypes = new IntObjectHashMap<TypeConstraintDescriptor>();
+                propertyTypes.put(
+                        constraintDescriptor.schema().getPropertyId(), constraintDescriptor.asPropertyTypeConstraint());
+                nodeTypeConstraintDescriptorMap.put(
+                        constraintDescriptor.schema().getLabelId(), propertyTypes);
+            }
+        }
+
+        for (ConstraintDescriptor constraintDescriptor : relsTypeConstraintDescriptors) {
+            var current = relsTypeConstraintDescriptorMap.get(
+                    constraintDescriptor.schema().getRelTypeId());
+            if (current != null) {
+                current.put(
+                        constraintDescriptor.schema().getPropertyId(), constraintDescriptor.asPropertyTypeConstraint());
+            } else {
+                var propertyTypes = new IntObjectHashMap<TypeConstraintDescriptor>();
+                propertyTypes.put(
+                        constraintDescriptor.schema().getPropertyId(), constraintDescriptor.asPropertyTypeConstraint());
+                relsTypeConstraintDescriptorMap.put(
+                        constraintDescriptor.schema().getRelTypeId(), propertyTypes);
+            }
         }
     }
 
@@ -178,6 +248,14 @@ public class ConstraintChecker {
         return relPropertyMap;
     }
 
+    public MutableLongObjectMap<MutableIntObjectMap<TypeConstraintDescriptor>> getNodeTypeConstraintDescriptorMap() {
+        return nodeTypeConstraintDescriptorMap;
+    }
+
+    public MutableLongObjectMap<MutableIntObjectMap<TypeConstraintDescriptor>> getRelsTypeConstraintDescriptorMap() {
+        return relsTypeConstraintDescriptorMap;
+    }
+
     /**
      * Visits the transaction state to delegate constraint checking tasks.
      *
@@ -205,7 +283,8 @@ public class ConstraintChecker {
      * @param propsToCheck Properties to check against the schema constraints.
      * @throws NodePropertyExistenceException If a property existence constraint is violated.
      */
-    public void checkNode(long nodeId, TokenSet tokenSet, IntSet propsToCheck) throws NodePropertyExistenceException {
+    public void checkNode(long nodeId, TokenSet tokenSet, MutableIntObjectMap<Value> propsToCheck)
+            throws NodePropertyExistenceException, PropertyTypeException {
         int numberOfLabels = tokenSet.numberOfTokens();
         long tsType;
         if (numberOfLabels > this.nodePropertyMap.size()) {
@@ -228,12 +307,92 @@ public class ConstraintChecker {
         }
     }
 
-    private void checkNode(long nodeId, long typeKey, int[] requiredKeys, IntSet propsToCheck)
+    private void checkNode(long nodeId, long typeKey, int[] requiredKeys, MutableIntObjectMap<Value> propsToCheck)
             throws NodePropertyExistenceException {
 
         for (int key : requiredKeys) {
-            if (!propsToCheck.contains(key)) {
+            if (!propsToCheck.containsKey(key)) {
                 this.nodeConstraintFailure(nodeId, typeKey, key);
+            }
+        }
+    }
+
+    public void checkNodeWithTypeConstraints(long nodeId, TokenSet tokenSet, MutableIntObjectMap<Value> propsToCheck)
+            throws PropertyTypeException {
+        int numberOfLabels = tokenSet.numberOfTokens();
+        long tsType;
+        if (numberOfLabels > this.nodeTypeConstraintDescriptorMap.size()) {
+            MutableLongIterator labels =
+                    this.nodeTypeConstraintDescriptorMap.keySet().longIterator();
+
+            while (labels.hasNext()) {
+                tsType = labels.next();
+                if (tokenSet.contains(Math.toIntExact(tsType))) {
+                    this.checkEntityWithTypeConstraints(
+                            nodeId, this.nodeTypeConstraintDescriptorMap.get(tsType), propsToCheck);
+                }
+            }
+        } else {
+            for (int i = 0; i < numberOfLabels; ++i) {
+                tsType = tokenSet.token(i);
+                MutableIntObjectMap<TypeConstraintDescriptor> pks = this.nodeTypeConstraintDescriptorMap.get(tsType);
+                if (pks != null) {
+                    this.checkEntityWithTypeConstraints(nodeId, pks, propsToCheck);
+                }
+            }
+        }
+    }
+
+    public void checkEntityWithTypeConstraints(
+            long entityId,
+            MutableIntObjectMap<TypeConstraintDescriptor> typeConstraints,
+            MutableIntObjectMap<Value> propsToCheck)
+            throws PropertyTypeException {
+
+        MutableIntIterator properties = typeConstraints.keySet().intIterator();
+        int propertyId;
+        while (properties.hasNext()) {
+            propertyId = properties.next();
+            if (propsToCheck.containsKey(propertyId)) {
+                String propertyType = propsToCheck.get(propertyId).getTypeName();
+                List<String> allowedPropertyTypes = new ArrayList<>();
+
+                for (SchemaValueType sv :
+                        typeConstraints.get(propertyId).propertyType().values()) {
+                    switch (sv.toPublicApi()) {
+                        case BOOLEAN -> allowedPropertyTypes.add("Boolean");
+                        case STRING -> allowedPropertyTypes.add("String");
+                        case INTEGER -> allowedPropertyTypes.addAll(Arrays.asList("Integer", "Long", "Short"));
+                        case FLOAT -> allowedPropertyTypes.addAll(Arrays.asList("Float", "Double"));
+                        case DATE -> allowedPropertyTypes.add("Date");
+                        case LOCAL_TIME -> allowedPropertyTypes.add("LocalTime");
+                        case ZONED_TIME -> allowedPropertyTypes.add("Time");
+                        case LOCAL_DATETIME -> allowedPropertyTypes.add("LocalDateTime");
+                        case ZONED_DATETIME -> allowedPropertyTypes.add("DateTime");
+                        case DURATION -> allowedPropertyTypes.add("Duration");
+                        case POINT -> allowedPropertyTypes.add("Point");
+                        case LIST_BOOLEAN_NOT_NULL -> allowedPropertyTypes.add("BooleanArray");
+                        case LIST_STRING_NOT_NULL -> allowedPropertyTypes.add("StringArray");
+                        case LIST_INTEGER_NOT_NULL -> allowedPropertyTypes.add("IntegerArray");
+                        case LIST_FLOAT_NOT_NULL -> allowedPropertyTypes.add("FloatArray");
+                        case LIST_DATE_NOT_NULL -> allowedPropertyTypes.add("DateArray");
+                        case LIST_LOCAL_TIME_NOT_NULL -> allowedPropertyTypes.add("LocalTimeArray");
+                        case LIST_ZONED_TIME_NOT_NULL -> allowedPropertyTypes.add("TimeArray");
+                        case LIST_LOCAL_DATETIME_NOT_NULL -> allowedPropertyTypes.add("LocalDateTimeArray");
+                        case LIST_ZONED_DATETIME_NOT_NULL -> allowedPropertyTypes.add("DateTimeArray");
+                        case LIST_DURATION_NOT_NULL -> allowedPropertyTypes.add("DurationArray");
+                        case LIST_POINT_NOT_NULL -> allowedPropertyTypes.add("PointArray");
+                    }
+                }
+
+                if (!allowedPropertyTypes.isEmpty() && !allowedPropertyTypes.contains(propertyType)) {
+                    throw new PropertyTypeException(
+                            typeConstraints.get(propertyId),
+                            Phase.VALIDATION,
+                            entityId,
+                            storageReader.tokenNameLookup(),
+                            propsToCheck.get(propertyId));
+                }
             }
         }
     }
